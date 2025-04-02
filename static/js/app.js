@@ -450,22 +450,17 @@ function buildBubbleChart(filteredData) {
         .text(d => d.data.key);  
 }
 
-function buildStackedBar(filteredData) {
-    // Calculate the variance (absolute difference) between boxOffice and budget
-    filteredData.forEach(d => {
-        d.variance = Math.abs(d.boxOffice - d.budget); // Absolute difference between budget and boxOffice earnings
-    });
-
-    // Get the top 10 movies with the highest variance (largest difference between boxOffice and budget)
+function buildSortedBar(filteredData) {
+    // Get the top 10 movies with the longest runtime
     const topMovies = [...filteredData]
-        .sort((a, b) => b.variance - a.variance) // Sort by highest variance (descending order)
-        .slice(0, 10); // Select top 10 movies
+        .sort((a, b) => b.runtime_min - a.runtime_min) // Use runtime_min
+        .slice(0, 10);
 
     // Clear previous chart
     d3.select("#chart4").html("");
 
-    // Set dimensions to fit inside 800x800px area
-    let margin = { top: 50, right: 50, bottom: 50, left: 175 };
+    // Set dimensions with more space for titles
+    let margin = { top: 50, right: 75, bottom: 75, left: 75 }; // Reduced left margin since titles are inside bars
     let width = 800 - margin.left - margin.right;
     let height = 800 - margin.top - margin.bottom;
 
@@ -479,158 +474,120 @@ function buildStackedBar(filteredData) {
 
     // Define scales
     let x = d3.scaleLinear()
-        .domain([0, d3.max(topMovies, d => d.budget)]) // Set domain to budget only initially
+        .domain([0, d3.max(topMovies, d => d.runtime_min)]) // Use runtime_min
         .nice()
         .range([0, width]);
 
     let y = d3.scaleBand()
-        .domain(topMovies.map(d => d.title))
+        .domain(topMovies.map(d => d.title)) // Use movie titles as y-axis labels
         .range([0, height])
         .padding(0.4);
 
-    // Append x-axis (initially showing budget only)
-    let xAxis = svg.append("g")
+    // Append x-axis with better labels
+    svg.append("g")
         .attr("class", "x-axis")
         .attr("transform", `translate(0, ${height})`)
-        .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".5s")));
+        .call(d3.axisBottom(x).ticks(6).tickFormat(d => `${d} min`))
+        .selectAll("text")
+        .style("font-size", "14px");
 
-    // Append y-axis
-    let yAxis = svg.append("g")
-        .attr("class", "y-axis")
-        .call(d3.axisLeft(y));
+    // Add x-axis label
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", height + 50)
+        .attr("text-anchor", "middle")
+        .text("Runtime (minutes)")
+        .style("font-size", "18px")
+        .style("font-weight", "bold");
 
-    // Append budget bars (Initial State)
-    const budgetBars = svg.selectAll(".bar-budget")
+    // Append bars for runtime
+    svg.selectAll(".bar-runtime")
         .data(topMovies)
         .enter()
         .append("rect")
-        .attr("class", "bar-budget")
+        .attr("class", "bar-runtime")
         .attr("y", d => y(d.title))
         .attr("height", y.bandwidth())
         .attr("x", 0)
-        .attr("width", d => x(d.budget))
-        .attr("fill", "purple");
+        .attr("width", d => x(d.runtime_min))
+        .attr("fill", "steelblue");
 
-    // Add text labels for the budget (Initial State)
-    const textLabels = svg.selectAll(".text-labels")
+    // Remove y-axis labels (titles on the left)
+    svg.append("g")
+        .attr("class", "y-axis")
+        .call(d3.axisLeft(y))
+        .selectAll("text")
+        .remove(); // This removes default y-axis labels
+
+    // Add movie titles inside bars
+    svg.selectAll(".bar-titles")
+        .data(topMovies)
+        .enter()
+        .append("text")
+        .attr("class", "bar-titles")
+        .attr("x", 5) // Slight left padding inside bars
+        .attr("y", d => y(d.title) + y.bandwidth() / 2 + 4) // Centered vertically
+        .attr("text-anchor", "start") // Align text to the left inside the bar
+        .attr("dominant-baseline", "middle") // Keep it centered
+        .text(d => d.title) // Movie title
+        .style("font-size", "14px")
+        .style("font-weight", "bold")
+        .style("fill", "white"); // White text for contrast
+
+    // Convert minutes to HH:MM format
+    function formatRuntime(runtime) {
+        let hours = Math.floor(runtime / 60);
+        let minutes = runtime % 60;
+        let hrText = hours === 1 ? "hr" : "hrs";
+        let minText = minutes === 1 ? "min" : "mins";
+        if (hours === 0) return `${minutes} ${minText}`;
+        if (minutes === 0) return `${hours} ${hrText}`;
+        return `${hours} ${hrText}. ${minutes} ${minText}.`;
+    }
+
+    // Add text labels for formatted runtime (HH:MM)
+    svg.selectAll(".text-labels")
         .data(topMovies)
         .enter()
         .append("text")
         .attr("class", "text-labels")
-        .attr("x", d => x(d.budget) + 10) // Initially aligned with budget bars
-        .attr("y", d => y(d.title) + y.bandwidth() / 2)
-        .attr("alignment-baseline", "middle")
-        .text(d => `${d.budget.toFixed(0)}`)  // Display the budget value
-        .style("font-size", "16px")
-        .style("font-weight", "bold");
-
-    // Add tooltips
-    const tooltip = d3.select("body").append("div")
-        .attr("class", "tooltip")
-        .style("opacity", 0)
-        .style("position", "absolute")
-        .style("background", "rgba(0,0,0,0.7)")
-        .style("color", "#fff")
-        .style("padding", "10px")
-        .style("border-radius", "5px");
-
-    svg.selectAll(".bar-budget")
-        .on("mouseover", function(event, d) {
-            tooltip.transition().duration(200).style("opacity", .9);
-            tooltip.html(`Budget: $${d.budget.toFixed(0)}<br>Box Office: $${d.boxOffice.toFixed(0)}<br>Variance: $${d.variance.toFixed(0)}`)
-                .style("left", (event.pageX + 5) + "px")
-                .style("top", (event.pageY - 28) + "px");
-        })
-        .on("mouseout", function() {
-            tooltip.transition().duration(500).style("opacity", 0);
-        });
-
-    // Add "Compare" button
-    const compareButton = d3.select("#chart4")
-        .append("button")
-        .attr("id", "compareButton")
-        .text("Compare")
-        .style("display", "block")
-        .style("margin", "20px auto")
-        .style("font-size", "16px")
-        .style("padding", "10px 20px")
-        .style("cursor", "pointer")
-        .on("click", function () {
-            // Toggle between default (budget only) and stacked chart
-            const isCompareMode = svg.select(".bar-stacked").empty();
-
-            if (isCompareMode) {
-                // Expand x-axis to fit both budget + boxOffice
-                x.domain([0, d3.max(topMovies, d => d.budget + d.boxOffice)]).nice();
-
-                // Transition x-axis to fit new domain (box office + budget)
-                svg.select(".x-axis")
-                    .transition()
-                    .duration(1000)
-                    .ease(d3.easeCubicInOut)
-                    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".2s")));
-
-                // Transition budget bars to show stacked bars (budget + boxOffice)
-                budgetBars.transition()
-                    .duration(1000)
-                    .attr("width", d => x(d.budget)) // Keep budget as it is (purple)
-                    .attr("fill", "purple");
-
-                // Create a new stacked bar with boxOffice on top of budget (orange)
-                const stackedBars = svg.selectAll(".bar-stacked")
-                    .data(topMovies)
-                    .enter()
-                    .append("rect")
-                    .attr("class", "bar-stacked")
-                    .attr("y", d => y(d.title))
-                    .attr("height", y.bandwidth())
-                    .attr("x", d => x(d.budget)) // Start where the budget ends
-                    .attr("width", d => x(d.boxOffice)) // Show boxOffice width
-                    .attr("fill", "orange");
-
-                // Add text labels for the return multiplier (Only after compare)
-                const multiplierLabels = svg.selectAll(".multiplier-labels")
-                    .data(topMovies)
-                    .enter()
-                    .append("text")
-                    .attr("class", "multiplier-labels")
-                    .attr("x", d => x(d.budget + d.boxOffice) + 10) // Position after both budget + boxOffice
-                    .attr("y", d => y(d.title) + y.bandwidth() / 2)
-                    .attr("alignment-baseline", "middle")
-                    .text(d => `${d.returnMultiplier.toFixed(1)}x`) // Multiplier value
-                    .style("font-size", "16px")
-                    .style("font-weight", "bold");
-
-                // Toggle button text
-                compareButton.text("Reset");
-            } else {
-                // Reset chart to initial budget view
-                svg.select(".x-axis")
-                    .transition()
-                    .duration(1000)
-                    .ease(d3.easeCubicInOut)
-                    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".2s")));
-
-                // Transition back to budget bars only (remove stacked)
-                svg.selectAll(".bar-stacked").remove();
-                svg.selectAll(".multiplier-labels").remove();
-
-                // Restore budget bars
-                budgetBars.transition()
-                    .duration(1000)
-                    .attr("width", d => x(d.budget)) // Reset to budget size
-                    .attr("fill", "purple");
-
-                // Restore text labels
-                textLabels.transition()
-                    .duration(1000)
-                    .attr("x", d => x(d.budget) + 10); // Align back to budget bars
-
-                // Reset button text
-                compareButton.text("Compare");
-            }
-        });
+        .attr("x", d => x(d.runtime_min) + 5) // Add padding to move text away from bars
+        .attr("y", d => y(d.title) + y.bandwidth() / 2 + 4) // Fine-tune vertical alignment
+        .attr("text-anchor", "start") // Align text properly
+        .attr("dominant-baseline", "middle") // Align with the center of bars
+        .text(d => formatRuntime(d.runtime_min)) // Use formatted runtime
+        .style("font-size", "14px")
+        .style("font-weight", "bold")
+        .style("fill", "#333"); // Darker color for better readability
 }
+
+
+// Function to wrap long text
+function wrapText(text, width) {
+    text.each(function () {
+        let textEl = d3.select(this),
+            words = textEl.text().split(/\s+/).reverse(),
+            word,
+            line = [],
+            lineNumber = 0,
+            lineHeight = 1.1,
+            y = textEl.attr("y"),
+            dy = 0,
+            tspan = textEl.text(null).append("tspan").attr("x", -10).attr("y", y).attr("dy", `${dy}em`);
+
+        while ((word = words.pop())) {
+            line.push(word);
+            tspan.text(line.join(" "));
+            if (tspan.node().getComputedTextLength() > width) {
+                line.pop();
+                tspan.text(line.join(" "));
+                line = [word];
+                tspan = textEl.append("tspan").attr("x", -10).attr("y", y).attr("dy", `${++lineNumber * lineHeight}em`).text(word);
+            }
+        }
+    });
+}
+
 
 
 // Create a function to update all dynamic charts when called
@@ -640,7 +597,7 @@ function updateDashboard() {
     buildTreemap(filteredData);
     updateFunFacts(filteredData);
     buildBubbleChart(filteredData);
-    buildStackedBar(filteredData);
+    buildSortedBar(filteredData);
 }
 
 // Load movie data and initialize dashboard
