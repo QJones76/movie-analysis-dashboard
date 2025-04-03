@@ -421,7 +421,7 @@ function buildBubbleChart(filteredData) {
                 // Make sure it is set to visible for mouse hover functionality
                 .style("visibility", "visible")
                 .html(`<strong>Company:</strong> ${d.data.key}<br>
-                     <strong>Gross:</strong> $${d.data.value.toLocaleString()}`);
+                     <strong>Box Office Earings:</strong> $${d.data.value.toLocaleString()}`);
         })
         // Add event listener for tooltips
         .on("mousemove", function(event) {
@@ -500,6 +500,18 @@ function buildSortedBar(filteredData) {
         .style("font-size", "18px")
         .style("font-weight", "bold");
 
+    // Create tooltip div (positioned absolutely)
+    const tooltip = d3.select("#chart4")
+        .append("div")
+        .style("position", "absolute")
+        .style("background", "#fff")
+        .style("border", "1px solid #ccc")
+        .style("padding", "5px 10px")
+        .style("border-radius", "5px")
+        .style("box-shadow", "2px 2px 6px rgba(0,0,0,0.2)")
+        .style("pointer-events", "none") // Prevent tooltip from interfering with mouse events
+        .style("opacity", 0); // Initially hidden
+
     // Append bars for runtime
     svg.selectAll(".bar-runtime")
         .data(topMovies)
@@ -510,7 +522,21 @@ function buildSortedBar(filteredData) {
         .attr("height", y.bandwidth())
         .attr("x", 0)
         .attr("width", d => x(d.runtime_min))
-        .attr("fill", "steelblue");
+        .attr("fill", (d, i) => colors[i % colors.length])
+        .on("mouseover", function (event, d) {
+            tooltip.style("opacity", 1)
+                .html(`<strong>${d.title}</strong><br>Runtime: ${formatRuntime(d.runtime_min)}`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 20) + "px");
+        })
+        .on("mousemove", function (event) {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 20) + "px");
+        })
+        .on("mouseout", function () {
+            tooltip.style("opacity", 0);
+        });
+        
 
     // Remove y-axis labels (titles on the left)
     svg.append("g")
@@ -530,9 +556,22 @@ function buildSortedBar(filteredData) {
         .attr("text-anchor", "start") // Align text to the left inside the bar
         .attr("dominant-baseline", "middle") // Keep it centered
         .text(d => d.title) // Movie title
-        .style("font-size", "14px")
+        .style("font-size", "18px")
         .style("font-weight", "bold")
-        .style("fill", "white"); // White text for contrast
+        .style("fill", "white") // White text for contrast
+        .on("mouseover", function (event, d) {
+            tooltip.style("opacity", 1)
+                .html(`<strong>${d.title}</strong><br>Runtime: ${formatRuntime(d.runtime_min)}`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 20) + "px");
+        })
+        .on("mousemove", function (event) {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 20) + "px");
+        })
+        .on("mouseout", function () {
+            tooltip.style("opacity", 0);
+        });
 
     // Convert minutes to HH:MM format
     function formatRuntime(runtime) {
@@ -556,7 +595,7 @@ function buildSortedBar(filteredData) {
         .attr("text-anchor", "start") // Align text properly
         .attr("dominant-baseline", "middle") // Align with the center of bars
         .text(d => formatRuntime(d.runtime_min)) // Use formatted runtime
-        .style("font-size", "14px")
+        .style("font-size", "16px")
         .style("font-weight", "bold")
         .style("fill", "#333"); // Darker color for better readability
 }
